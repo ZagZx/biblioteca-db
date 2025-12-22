@@ -132,7 +132,6 @@ begin
 end;
 //
 
-DELIMITER ;
 
 -- Geração Automática de Valores
 
@@ -140,7 +139,6 @@ DELIMITER ;
 -- Define automaticamente o status do empréstimo como "pendente"
 -- Caso o status não seja informado pelo sistema ou usuário
 
-DELIMITER //
 
 CREATE TRIGGER trg_auto_status_emprestimo
 BEFORE INSERT ON emprestimos
@@ -152,13 +150,11 @@ BEGIN
 END;
 //
 
-DELIMITER ;
 
 
 -- Preenche automaticamente a data de inscrição do usuário
 -- Caso a data não seja informada no momento do cadastro
 
-DELIMITER //
 
 CREATE TRIGGER trg_auto_data_inscricao
 BEFORE INSERT ON usuarios
@@ -170,13 +166,11 @@ BEGIN
 END;
 //
 
-DELIMITER ;
 
 
 -- Gera automaticamente a data de devolução prevista
 -- Considera 7 dias após a data do empréstimo, se não for informada
 
-DELIMITER //
 
 CREATE TRIGGER trg_auto_data_devolucao_prevista
 BEFORE INSERT ON emprestimos
@@ -188,13 +182,11 @@ BEGIN
 END;
 //
 
-DELIMITER ;
 
 
 -- Define automaticamente o valor inicial da multa do usuário
 -- Evita valores nulos no cadastro de novos usuários
 
-DELIMITER //
 
 CREATE TRIGGER trg_auto_multa_padrao
 BEFORE INSERT ON usuarios
@@ -206,14 +198,12 @@ BEGIN
 END;
 //
 
-DELIMITER ;
 
 
 
 -- Gera automaticamente um resumo padrão para o livro
 -- Caso o campo resumo não seja preenchido no cadastro
 
-DELIMITER //
 
 CREATE TRIGGER trg_auto_resumo_livro
 BEFORE INSERT ON livros
@@ -229,7 +219,6 @@ END;
 //
 
 
-DELIMITER ;
 -- TRIGGERS AUDITORIA
 
 CREATE TRIGGER trg_log_update_livro AFTER UPDATE ON livros
