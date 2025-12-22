@@ -57,3 +57,15 @@ CREATE TABLE emprestimos (
     FOREIGN KEY (usuario_id) REFERENCES usuarios(id_usuario) ON DELETE CASCADE,
     FOREIGN KEY (livro_id) REFERENCES livros(id_livro) ON DELETE CASCADE
 );
+
+CREATE TABLE logs(
+	id INT AUTO_INCREMENT PRIMARY KEY,
+    tabela ENUM('autores', 'editoras', 'emprestimos', 'generos', 'livros', 'usuarios') NOT NULL,
+    acao ENUM('update', 'delete') NOT NULL,
+    data_alteracao TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    registro_id INT NOT NULL,
+    dados_antigos JSON NOT NULL,
+    dados_atuais JSON
+    -- usuario_id INT NOT NULL, 
+    -- FOREIGN KEY (usuario_id) REFERENCES usuarios(id_usuario)
+);
