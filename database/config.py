@@ -6,3 +6,4 @@ PASSWORD = ""
 
 SQL_BASE = "./database/base.sql"
 SQL_INSERTS = "./database/inserts.sql"
+SQL_TRIGGERS = "./database/gatilhos.sql"

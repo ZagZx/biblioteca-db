@@ -29,16 +29,6 @@ BEGIN
 END //
 
 CREATE TRIGGER
-trg_repoe_livro_delete AFTER DELETE
-ON emprestimos
-FOR EACH ROW
-BEGIN
-    IF OLD.status_emprestimo != "devolvido" THEN
-        UPDATE livros SET quantidade_disponivel = quantidade_disponivel + 1 WHERE id_livro = OLD.livro_id;
-    END IF;
-END //
-
-CREATE TRIGGER
 trg_multar AFTER UPDATE
 ON emprestimos
 FOR EACH ROW
@@ -80,7 +70,7 @@ begin
     if NEW.quantidade_disponivel < 0 then
         set NEW.quantidade_disponivel = 0;
     end if;
-end//
+END //
 
 -- Ajustar ISBN com tamanho diferente de 13 (se não tiver 13 caracteres , ele vira 0)
 
@@ -91,7 +81,7 @@ begin
     if length(NEW.isbn) < 13 then 
         set NEW.isbn = '0000000000000';
     end if;
-end//
+END //
 
 -- Ajustar data futura (se estiver no futuro coloque na data atual)
 
@@ -103,7 +93,7 @@ begin
         set NEW.ano_publicacao = year(curdate());
     end if;
     
-end//
+END //
 
 -- Impedir títulos de livros vazios
 
@@ -116,8 +106,7 @@ begin
     if NEW.titulo = '' then
         set NEW.titulo = 'TÍTULO NÃO INFORMADO';
     end if;
-end;
-//
+END //
 
 
 -- Impedir multa negativa do usuário
@@ -129,8 +118,7 @@ begin
     if NEW.multa_atual < 0 then
         set NEW.multa_atual = 0;
     end if;
-end;
-//
+END //
 
 
 -- Geração Automática de Valores
@@ -147,8 +135,7 @@ BEGIN
     IF new.status_emprestimo IS NULL THEN
         SET new.status_emprestimo = 'pendente';
     END IF;
-END;
-//
+END //
 
 
 
@@ -163,8 +150,7 @@ BEGIN
     IF NEW.data_inscricao IS NULL THEN
         SET NEW.data_inscricao = CURDATE();
     END IF;
-END;
-//
+END //
 
 
 
@@ -179,8 +165,7 @@ BEGIN
     IF NEW.data_devolucao_prevista IS NULL THEN
         SET NEW.data_devolucao_prevista = DATE_ADD(NEW.data_emprestimo, INTERVAL 7 DAY);
     END IF;
-END;
-//
+END //
 
 
 
@@ -195,8 +180,7 @@ BEGIN
     IF NEW.multa_atual IS NULL THEN
         SET NEW.multa_atual = 0;
     END IF;
-END;
-//
+END //
 
 
 
@@ -215,8 +199,7 @@ BEGIN
             '" cadastrado automaticamente no sistema.'
         );
     END IF;
-END;
-//
+END //
 
 
 -- TRIGGERS AUDITORIA
@@ -234,7 +217,7 @@ BEGIN
         'livros',
         'update',
         NEW.id_livro,
-        JSON_OBJECT( -- DADOS ANTIGOS
+        JSON_OBJECT( 
 			'id_livro', OLD.id_livro,
             'titulo', OLD.titulo,
             'autor_id', OLD.autor_id,
@@ -245,7 +228,7 @@ BEGIN
             'quantidade_disponivel', OLD.quantidade_disponivel,
             'resumo', OLD.resumo
         ),
-		JSON_OBJECT( -- DADOS ATUAIS
+		JSON_OBJECT( 
 			'id_livro', NEW.id_livro,
             'titulo', NEW.titulo,
             'autor_id', NEW.autor_id,
@@ -257,8 +240,7 @@ BEGIN
             'resumo', NEW.resumo
         )
     );
-END;
-// 
+END // 
 
 CREATE TRIGGER trg_log_delete_livro AFTER DELETE ON livros
 FOR EACH ROW
@@ -272,7 +254,7 @@ BEGIN
         'livros',
         'delete',
         OLD.id_livro,
-        JSON_OBJECT( -- DADOS ANTIGOS
+        JSON_OBJECT( 
 			'id_livro', OLD.id_livro,
             'titulo', OLD.titulo,
             'autor_id', OLD.autor_id,
@@ -284,8 +266,7 @@ BEGIN
             'resumo', OLD.resumo
         )
     );
-END;
-// 
+END // 
 
 CREATE TRIGGER trg_log_update_autor AFTER UPDATE ON autores
 FOR EACH ROW
@@ -300,14 +281,14 @@ BEGIN
         'autores',
         'update',
         NEW.id_autor,
-        JSON_OBJECT( -- DADOS ANTIGOS
+        JSON_OBJECT( 
 			'id_autor', OLD.id_autor,
             'nome_autor', OLD.nome_autor,
             'nacionalidade', OLD.nacionalidade,
             'data_nascimento', OLD.data_nascimento,
             'biografia', OLD.biografia
         ),
-		JSON_OBJECT( -- DADOS ATUAIS
+		JSON_OBJECT( 
 			'id_autor', NEW.id_autor,
             'nome_autor', NEW.nome_autor,
             'nacionalidade', NEW.nacionalidade,
@@ -315,8 +296,7 @@ BEGIN
             'biografia', NEW.biografia
         )
     );
-END;
-// 
+END // 
 
 CREATE TRIGGER trg_log_delete_autor AFTER DELETE ON autores
 FOR EACH ROW
@@ -330,7 +310,7 @@ BEGIN
         'autores',
         'delete',
         OLD.id_autor,
-        JSON_OBJECT( -- DADOS ANTIGOS
+        JSON_OBJECT( 
 			'id_autor', OLD.id_autor,
             'nome_autor', OLD.nome_autor,
             'nacionalidade', OLD.nacionalidade,
@@ -338,8 +318,7 @@ BEGIN
             'biografia', OLD.biografia
         )
     );
-END;
-// 
+END // 
 
 CREATE TRIGGER trg_log_update_editora AFTER UPDATE ON editoras
 FOR EACH ROW
@@ -354,19 +333,18 @@ BEGIN
         'editoras',
         'update',
         NEW.id_editora,
-        JSON_OBJECT( -- DADOS ANTIGOS
+        JSON_OBJECT( 
 			'id_editora', OLD.id_editora,
             'nome_editora', OLD.nome_editora,
             'endereco_editora', OLD.endereco_editora
         ),
-		JSON_OBJECT( -- DADOS ATUAIS
+		JSON_OBJECT( 
 			'id_editora', NEW.id_editora,
             'nome_editora', NEW.nome_editora,
             'endereco_editora', NEW.endereco_editora
         )
     );
-END;
-// 
+END // 
 
 CREATE TRIGGER trg_log_delete_editora AFTER DELETE ON editoras
 FOR EACH ROW
@@ -380,11 +358,12 @@ BEGIN
         'editoras',
         'delete',
         OLD.id_editora,
-        JSON_OBJECT( -- DADOS ANTIGOS
+        JSON_OBJECT( 
 			'id_editora', OLD.id_editora,
             'nome_editora', OLD.nome_editora,
             'endereco_editora', OLD.endereco_editora
         )
     );
-END;
-// 
+END // 
+
+DELIMITER ;

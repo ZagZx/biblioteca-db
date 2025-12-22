@@ -1,6 +1,6 @@
 import mysql.connector
 from datetime import date
-from database.config import USER, HOST, PORT, DATABASE, PASSWORD, SQL_BASE, SQL_INSERTS
+from database.config import USER, HOST, PORT, DATABASE, PASSWORD, SQL_BASE, SQL_INSERTS, SQL_TRIGGERS
 from werkzeug.security import generate_password_hash
 
 
@@ -10,6 +10,392 @@ def connect() -> mysql.connector.MySQLConnection:
     )
 
     return conn
+
+
+# AVISO: NÃO CONSEGUIMOS RODAR O .SQL VIA EXECUTE, 
+# FOI NECESSÁRIO COLOCAR O CODIGO DAS TRIGGERS AQUI MANUALMENTE
+# PORQUE O MYSQL CONNECTOR NÃO SUPORTA O DELIMITER
+# 👍
+def createTriggers():
+    triggers = [
+
+        # ===============================
+        # EMPRÉSTIMOS / LIVROS (PÓS-EVENTO)
+        # ===============================
+
+        """
+        CREATE TRIGGER trg_repoe_livro
+        AFTER UPDATE ON emprestimos
+        FOR EACH ROW
+        BEGIN
+            IF NEW.status_emprestimo = 'devolvido' THEN
+                UPDATE livros
+                SET quantidade_disponivel = quantidade_disponivel + 1
+                WHERE id_livro = OLD.livro_id;
+            END IF;
+        END
+        """,
+
+        """
+        CREATE TRIGGER trg_tira_livro
+        AFTER INSERT ON emprestimos
+        FOR EACH ROW
+        BEGIN
+            UPDATE livros
+            SET quantidade_disponivel = quantidade_disponivel - 1
+            WHERE id_livro = NEW.livro_id;
+        END
+        """,
+
+        """
+        CREATE TRIGGER trg_repoe_livro_delete
+        AFTER DELETE ON emprestimos
+        FOR EACH ROW
+        BEGIN
+            IF OLD.status_emprestimo != 'devolvido' THEN
+                UPDATE livros
+                SET quantidade_disponivel = quantidade_disponivel + 1
+                WHERE id_livro = OLD.livro_id;
+            END IF;
+        END
+        """,
+
+        """
+        CREATE TRIGGER trg_multar
+        AFTER UPDATE ON emprestimos
+        FOR EACH ROW
+        BEGIN
+            DECLARE dias INT;
+            IF OLD.status_emprestimo != 'devolvido'
+               AND NEW.status_emprestimo = 'devolvido'
+               AND CURRENT_DATE() > OLD.data_devolucao_prevista THEN
+                SET dias = CURRENT_DATE() - OLD.data_devolucao_prevista;
+                UPDATE usuarios
+                SET multa_atual = multa_atual + (dias * 0.50)
+                WHERE id_usuario = OLD.usuario_id;
+            END IF;
+        END
+        """,
+
+        """
+        CREATE TRIGGER trg_descontar_multa
+        AFTER UPDATE ON emprestimos
+        FOR EACH ROW
+        BEGIN
+            DECLARE dias INT;
+            IF OLD.status_emprestimo != 'devolvido'
+               AND NEW.status_emprestimo = 'devolvido'
+               AND CURRENT_DATE() < OLD.data_devolucao_prevista THEN
+                SET dias = OLD.data_devolucao_prevista - CURRENT_DATE();
+                UPDATE usuarios
+                SET multa_atual = multa_atual - (dias * 0.05)
+                WHERE id_usuario = OLD.usuario_id;
+            END IF;
+        END
+        """,
+
+        # ===============================
+        # VALIDAÇÕES – LIVROS
+        # ===============================
+
+        """
+        CREATE TRIGGER trg_corrige_quantidade_livro
+        BEFORE INSERT ON livros
+        FOR EACH ROW
+        BEGIN
+            IF NEW.quantidade_disponivel < 0 THEN
+                SET NEW.quantidade_disponivel = 0;
+            END IF;
+        END
+        """,
+
+        """
+        CREATE TRIGGER trg_corrige_isbn
+        BEFORE INSERT ON livros
+        FOR EACH ROW
+        BEGIN
+            IF LENGTH(NEW.isbn) < 13 THEN
+                SET NEW.isbn = '0000000000000';
+            END IF;
+        END
+        """,
+
+        """
+        CREATE TRIGGER trg_corrige_ano_publicacao_livro
+        BEFORE INSERT ON livros
+        FOR EACH ROW
+        BEGIN
+            IF NEW.ano_publicacao > YEAR(CURDATE()) THEN
+                SET NEW.ano_publicacao = YEAR(CURDATE());
+            END IF;
+        END
+        """,
+
+        """
+        CREATE TRIGGER trg_livros_titulo_validacao
+        BEFORE INSERT ON livros
+        FOR EACH ROW
+        BEGIN
+            SET NEW.titulo = TRIM(NEW.titulo);
+            IF NEW.titulo = '' THEN
+                SET NEW.titulo = 'TÍTULO NÃO INFORMADO';
+            END IF;
+        END
+        """,
+
+        """
+        CREATE TRIGGER trg_auto_resumo_livro
+        BEFORE INSERT ON livros
+        FOR EACH ROW
+        BEGIN
+            IF NEW.resumo IS NULL OR NEW.resumo = '' THEN
+                SET NEW.resumo = CONCAT(
+                    'Livro "', NEW.titulo,
+                    '" cadastrado automaticamente no sistema.'
+                );
+            END IF;
+        END
+        """,
+
+        # ===============================
+        # USUÁRIOS
+        # ===============================
+
+        """
+        CREATE TRIGGER trg_usuarios_multa_validacao
+        BEFORE INSERT ON usuarios
+        FOR EACH ROW
+        BEGIN
+            IF NEW.multa_atual < 0 THEN
+                SET NEW.multa_atual = 0;
+            END IF;
+        END
+        """,
+
+        """
+        CREATE TRIGGER trg_auto_data_inscricao
+        BEFORE INSERT ON usuarios
+        FOR EACH ROW
+        BEGIN
+            IF NEW.data_inscricao IS NULL THEN
+                SET NEW.data_inscricao = CURDATE();
+            END IF;
+        END
+        """,
+
+        """
+        CREATE TRIGGER trg_auto_multa_padrao
+        BEFORE INSERT ON usuarios
+        FOR EACH ROW
+        BEGIN
+            IF NEW.multa_atual IS NULL THEN
+                SET NEW.multa_atual = 0;
+            END IF;
+        END
+        """,
+
+        # ===============================
+        # EMPRÉSTIMOS – AUTOMAÇÕES
+        # ===============================
+
+        """
+        CREATE TRIGGER trg_auto_status_emprestimo
+        BEFORE INSERT ON emprestimos
+        FOR EACH ROW
+        BEGIN
+            IF NEW.status_emprestimo IS NULL THEN
+                SET NEW.status_emprestimo = 'pendente';
+            END IF;
+        END
+        """,
+
+        """
+        CREATE TRIGGER trg_auto_data_devolucao_prevista
+        BEFORE INSERT ON emprestimos
+        FOR EACH ROW
+        BEGIN
+            IF NEW.data_devolucao_prevista IS NULL THEN
+                SET NEW.data_devolucao_prevista =
+                    DATE_ADD(NEW.data_emprestimo, INTERVAL 7 DAY);
+            END IF;
+        END
+        """,
+
+        # ===============================
+        # AUDITORIA – LIVROS
+        # ===============================
+
+        """
+        CREATE TRIGGER trg_log_update_livro
+        AFTER UPDATE ON livros
+        FOR EACH ROW
+        BEGIN
+            INSERT INTO logs (tabela, acao, registro_id, dados_antigos, dados_atuais)
+            VALUES (
+                'livros',
+                'update',
+                NEW.id_livro,
+                JSON_OBJECT(
+                    'id_livro', OLD.id_livro,
+                    'titulo', OLD.titulo,
+                    'autor_id', OLD.autor_id,
+                    'isbn', OLD.isbn,
+                    'ano_publicacao', OLD.ano_publicacao,
+                    'genero_id', OLD.genero_id,
+                    'editora_id', OLD.editora_id,
+                    'quantidade_disponivel', OLD.quantidade_disponivel,
+                    'resumo', OLD.resumo
+                ),
+                JSON_OBJECT(
+                    'id_livro', NEW.id_livro,
+                    'titulo', NEW.titulo,
+                    'autor_id', NEW.autor_id,
+                    'isbn', NEW.isbn,
+                    'ano_publicacao', NEW.ano_publicacao,
+                    'genero_id', NEW.genero_id,
+                    'editora_id', NEW.editora_id,
+                    'quantidade_disponivel', NEW.quantidade_disponivel,
+                    'resumo', NEW.resumo
+                )
+            );
+        END
+        """,
+
+        """
+        CREATE TRIGGER trg_log_delete_livro
+        AFTER DELETE ON livros
+        FOR EACH ROW
+        BEGIN
+            INSERT INTO logs (tabela, acao, registro_id, dados_antigos)
+            VALUES (
+                'livros',
+                'delete',
+                OLD.id_livro,
+                JSON_OBJECT(
+                    'id_livro', OLD.id_livro,
+                    'titulo', OLD.titulo,
+                    'autor_id', OLD.autor_id,
+                    'isbn', OLD.isbn,
+                    'ano_publicacao', OLD.ano_publicacao,
+                    'genero_id', OLD.genero_id,
+                    'editora_id', OLD.editora_id,
+                    'quantidade_disponivel', OLD.quantidade_disponivel,
+                    'resumo', OLD.resumo
+                )
+            );
+        END
+        """,
+
+        # ===============================
+        # AUDITORIA – AUTORES
+        # ===============================
+
+        """
+        CREATE TRIGGER trg_log_update_autor
+        AFTER UPDATE ON autores
+        FOR EACH ROW
+        BEGIN
+            INSERT INTO logs (tabela, acao, registro_id, dados_antigos, dados_atuais)
+            VALUES (
+                'autores',
+                'update',
+                NEW.id_autor,
+                JSON_OBJECT(
+                    'id_autor', OLD.id_autor,
+                    'nome_autor', OLD.nome_autor,
+                    'nacionalidade', OLD.nacionalidade,
+                    'data_nascimento', OLD.data_nascimento,
+                    'biografia', OLD.biografia
+                ),
+                JSON_OBJECT(
+                    'id_autor', NEW.id_autor,
+                    'nome_autor', NEW.nome_autor,
+                    'nacionalidade', NEW.nacionalidade,
+                    'data_nascimento', NEW.data_nascimento,
+                    'biografia', NEW.biografia
+                )
+            );
+        END
+        """,
+
+        """
+        CREATE TRIGGER trg_log_delete_autor
+        AFTER DELETE ON autores
+        FOR EACH ROW
+        BEGIN
+            INSERT INTO logs (tabela, acao, registro_id, dados_antigos)
+            VALUES (
+                'autores',
+                'delete',
+                OLD.id_autor,
+                JSON_OBJECT(
+                    'id_autor', OLD.id_autor,
+                    'nome_autor', OLD.nome_autor,
+                    'nacionalidade', OLD.nacionalidade,
+                    'data_nascimento', OLD.data_nascimento,
+                    'biografia', OLD.biografia
+                )
+            );
+        END
+        """,
+
+        # ===============================
+        # AUDITORIA – EDITORAS
+        # ===============================
+
+        """
+        CREATE TRIGGER trg_log_update_editora
+        AFTER UPDATE ON editoras
+        FOR EACH ROW
+        BEGIN
+            INSERT INTO logs (tabela, acao, registro_id, dados_antigos, dados_atuais)
+            VALUES (
+                'editoras',
+                'update',
+                NEW.id_editora,
+                JSON_OBJECT(
+                    'id_editora', OLD.id_editora,
+                    'nome_editora', OLD.nome_editora,
+                    'endereco_editora', OLD.endereco_editora
+                ),
+                JSON_OBJECT(
+                    'id_editora', NEW.id_editora,
+                    'nome_editora', NEW.nome_editora,
+                    'endereco_editora', NEW.endereco_editora
+                )
+            );
+        END
+        """,
+
+        """
+        CREATE TRIGGER trg_log_delete_editora
+        AFTER DELETE ON editoras
+        FOR EACH ROW
+        BEGIN
+            INSERT INTO logs (tabela, acao, registro_id, dados_antigos)
+            VALUES (
+                'editoras',
+                'delete',
+                OLD.id_editora,
+                JSON_OBJECT(
+                    'id_editora', OLD.id_editora,
+                    'nome_editora', OLD.nome_editora,
+                    'endereco_editora', OLD.endereco_editora
+                )
+            );
+        END
+        """
+    ]
+
+    conn = connect()
+    cursor = conn.cursor()
+
+    for trigger in triggers:
+        cursor.execute(trigger)
+
+    conn.commit()
+    cursor.close()
+
 
 
 def initDB():
@@ -27,10 +413,14 @@ def initDB():
         cur.close()
 
         conn.close()
+
+
         pswd_hash = generate_password_hash('admin')
 
         initBooks()
         addUser(nome='admin', email='admin@admin', senha_hash=pswd_hash, admin=True)
+        
+        createTriggers()
 
 
 def initBooks():
