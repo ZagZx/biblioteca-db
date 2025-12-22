@@ -1,6 +1,7 @@
 DELIMITER //
 -- Pós evento
-CREATE TRIGGER trg_repoe_livro AFTER UPDATE 
+CREATE TRIGGER 
+trg_repoe_livro AFTER UPDATE 
 ON emprestimos 
 FOR EACH ROW 
 BEGIN 
@@ -15,6 +16,58 @@ ON emprestimos
 FOR EACH ROW
 BEGIN
 	UPDATE livros SET quantidade_disponivel = quantidade_disponivel - 1 WHERE id_livro = NEW.livro_id;
+END //
+
+CREATE TRIGGER
+trg_repoe_livro_delete AFTER DELETE
+ON emprestimos
+FOR EACH ROW
+BEGIN
+    IF OLD.status_emprestimo != "devolvido" THEN
+        UPDATE livros SET quantidade_disponivel = quantidade_disponivel + 1 WHERE id_livro = OLD.livro_id;
+    END IF ;
+END //
+
+CREATE TRIGGER
+trg_repoe_livro_delete AFTER DELETE
+ON emprestimos
+FOR EACH ROW
+BEGIN
+    IF OLD.status_emprestimo != "devolvido" THEN
+        UPDATE livros SET quantidade_disponivel = quantidade_disponivel + 1 WHERE id_livro = OLD.livro_id;
+    END IF;
+END //
+
+CREATE TRIGGER
+trg_multar AFTER UPDATE
+ON emprestimos
+FOR EACH ROW
+BEGIN
+	DECLARE dias INTEGER;
+	IF OLD.status_emprestimo != "devolvido" THEN
+		IF NEW.status_emprestimo = "devolvido" THEN
+			IF CURRENT_DATE() > OLD.data_devolucao_prevista THEN
+				SET dias = CURRENT_DATE() - OLD.data_devolucao_prevista;
+                UPDATE usuarios SET multa_atual = multa_atual + (dias * 0.50) WHERE id_usuario = OLD.usuario_id;
+            END IF;
+		END IF;
+	END IF;
+END //
+
+CREATE TRIGGER
+trg_descontar_multa AFTER UPDATE
+ON emprestimos
+FOR EACH ROW
+BEGIN
+	DECLARE dias INTEGER;
+	IF OLD.status_emprestimo != "devolvido" THEN
+		IF NEW.status_emprestimo = "devolvido" THEN
+			IF CURRENT_DATE() < OLD.data_devolucao_prevista THEN
+				SET dias = OLD.data_devolucao_prevista - CURRENT_DATE();
+                UPDATE usuarios SET multa_atual = multa_atual - (dias * 0.05) WHERE id_usuario = OLD.usuario_id;
+            END IF;
+		END IF;
+	END IF;
 END //
 
 -- triggers validação
